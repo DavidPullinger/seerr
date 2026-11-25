@@ -46,6 +46,8 @@ interface Job extends PrepareStatus {
 
 const jobs = new Map<string, Job>();
 const TIMEOUT_MS = 15 * 60 * 1000;
+/** A download at 0% this long is treated as stuck. */
+const STALL_MS = 90 * 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function prepareStatus(id: string, userId: number): PrepareStatus {
@@ -262,6 +264,9 @@ async function run(
   // Series Play (no episode chosen) when the first episode can't be fetched: the
   // earliest one that did arrive.
   let fallbackTo: number | undefined;
+  // When the target's download started making no progress (e.g. not cached on
+  // Real-Debrid and nobody sharing it).
+  let stalledSince = 0;
   while (Date.now() - started < TIMEOUT_MS) {
     const m = await media();
     const externalId = m?.externalServiceId;
@@ -373,12 +378,28 @@ async function run(
       const progress =
         q.size > 0 ? Math.round(((q.size - q.sizeleft) / q.size) * 100) : 0;
       const done = q.size > 0 && q.sizeleft === 0;
+      if (progress > 0 || done) stalledSince = 0;
+      else stalledSince ||= Date.now();
+      if (
+        stalledSince &&
+        Date.now() - stalledSince > STALL_MS &&
+        episodeNumber === undefined &&
+        fallbackTo === undefined &&
+        earliestOnDisk !== undefined
+      ) {
+        // Series Play and the first episode is stuck: start from what's here.
+        fallbackTo = earliestOnDisk;
+        continue;
+      }
       set(
         done
           ? { stage: 'importing', message: 'Importing…', progress: 100 }
           : {
               stage: 'downloading',
-              message: `Fetching from Real-Debrid… ${progress}%`,
+              message:
+                stalledSince && Date.now() - stalledSince > STALL_MS
+                  ? "Real-Debrid doesn't have this one cached and hasn't started it; it may take a while."
+                  : `Fetching from Real-Debrid… ${progress}%`,
               progress,
             }
       );
