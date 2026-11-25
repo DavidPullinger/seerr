@@ -7,7 +7,11 @@ import Tooltip from '@app/components/Common/Tooltip';
 import RequestModal from '@app/components/RequestModal';
 import ErrorCard from '@app/components/TitleCard/ErrorCard';
 import Placeholder from '@app/components/TitleCard/Placeholder';
-import { CardPlayButton, CardWatchBadge } from '@app/components/Watch';
+import {
+  CardActions,
+  CardWatchBadge,
+  useCardActions,
+} from '@app/components/Watch';
 import { useIsTouch } from '@app/hooks/useIsTouch';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
@@ -311,6 +315,15 @@ const TitleCard = ({
     { type: 'or' }
   );
 
+  // Home-theatre fork: round Play/Request icons under the text instead of the Request button.
+  const canRequest =
+    showRequestButton &&
+    (!currentStatus ||
+      currentStatus === MediaStatus.UNKNOWN ||
+      currentStatus === MediaStatus.DELETED);
+  const iconActions = useCardActions(mediaType);
+  const buttonRow = iconActions || canRequest;
+
   const showHideButton = hasPermission([Permission.MANAGE_BLOCKLIST], {
     type: 'or',
   });
@@ -513,12 +526,7 @@ const TitleCard = ({
                 <div className="flex h-full w-full items-end">
                   <div
                     className={`px-2 text-white ${
-                      !showRequestButton ||
-                      (currentStatus &&
-                        currentStatus !== MediaStatus.UNKNOWN &&
-                        currentStatus !== MediaStatus.DELETED)
-                        ? 'pb-2'
-                        : 'pb-11'
+                      !buttonRow ? 'pb-2' : iconActions ? 'pb-14' : 'pb-11'
                     }`}
                   >
                     {year && <div className="text-sm font-medium">{year}</div>}
@@ -539,13 +547,7 @@ const TitleCard = ({
                     <div
                       className="whitespace-normal text-xs"
                       style={{
-                        WebkitLineClamp:
-                          !showRequestButton ||
-                          (currentStatus &&
-                            currentStatus !== MediaStatus.UNKNOWN &&
-                            currentStatus !== MediaStatus.DELETED)
-                            ? 5
-                            : 3,
+                        WebkitLineClamp: !buttonRow ? 5 : 3,
                         display: '-webkit-box',
                         overflow: 'hidden',
                         WebkitBoxOrient: 'vertical',
@@ -558,29 +560,32 @@ const TitleCard = ({
                 </div>
               </Link>
 
-              <div className="absolute bottom-0 left-0 right-0 flex justify-between gap-1 px-2 py-2">
-                <CardPlayButton
+              <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2 py-2">
+                <CardActions
                   tmdbId={id}
                   mediaType={mediaType}
                   title={title}
+                  canRequest={canRequest}
+                  onRequest={() => setShowRequestModal(true)}
+                  fallback={
+                    canRequest && (
+                      <Button
+                        buttonType="primary"
+                        buttonSize="sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowRequestModal(true);
+                        }}
+                        className="h-7 w-full"
+                      >
+                        <ArrowDownTrayIcon />
+                        <span>
+                          {intl.formatMessage(globalMessages.request)}
+                        </span>
+                      </Button>
+                    )
+                  }
                 />
-                {showRequestButton &&
-                  (!currentStatus ||
-                    currentStatus === MediaStatus.UNKNOWN ||
-                    currentStatus === MediaStatus.DELETED) && (
-                    <Button
-                      buttonType="primary"
-                      buttonSize="sm"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setShowRequestModal(true);
-                      }}
-                      className="h-7 w-full"
-                    >
-                      <ArrowDownTrayIcon />
-                      <span>{intl.formatMessage(globalMessages.request)}</span>
-                    </Button>
-                  )}
               </div>
             </div>
           </Transition>

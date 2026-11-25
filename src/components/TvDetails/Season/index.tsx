@@ -1,7 +1,11 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
-import { EpisodePlay, useSeasonWatch } from '@app/components/Watch';
+import {
+  EpisodeThumbOverlay,
+  episodeRowProps,
+  useSeasonWatch,
+} from '@app/components/Watch';
 import defineMessages from '@app/utils/defineMessages';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
@@ -41,10 +45,14 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
           .slice()
           .reverse()
           .map((episode) => {
+            const { className: rowClass, ...rowProps } = episodeRowProps(
+              watch[episode.episodeNumber]
+            );
             return (
               <div
-                className="flex flex-col space-y-4 py-4 xl:flex-row xl:space-x-4 xl:space-y-4"
+                className={`flex flex-col space-y-4 py-4 xl:flex-row xl:space-x-4 xl:space-y-4 ${rowClass}`}
                 key={`season-${seasonNumber}-episode-${episode.episodeNumber}`}
+                {...rowProps}
               >
                 <div className="flex-1">
                   <div className="flex flex-col space-y-2 xl:flex-row xl:items-center xl:space-x-2 xl:space-y-0">
@@ -56,7 +64,6 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                     )}
                   </div>
                   {episode.overview && <p>{episode.overview}</p>}
-                  <EpisodePlay state={watch[episode.episodeNumber]} />
                 </div>
                 {episode.stillPath && (
                   <div className="relative aspect-video xl:h-32">
@@ -67,6 +74,7 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                       alt=""
                       fill
                     />
+                    <EpisodeThumbOverlay state={watch[episode.episodeNumber]} />
                   </div>
                 )}
               </div>
