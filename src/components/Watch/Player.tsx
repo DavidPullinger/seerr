@@ -96,7 +96,9 @@ const Preparing = ({
           {target.title ?? 'Loading'}
           {target.mediaType === 'tv' && (
             <span className="ml-2 text-base font-normal text-gray-400">
-              Season {target.seasonNumber ?? 1}
+              {target.episodeNumber
+                ? `S${target.seasonNumber ?? 1} E${target.episodeNumber}`
+                : `Season ${target.seasonNumber ?? 1}`}
             </span>
           )}
         </h2>
@@ -140,17 +142,16 @@ const Preparing = ({
           <button
             type="button"
             onClick={onClose}
+            title={
+              failed
+                ? undefined
+                : "Keeps the request going; it'll be in the library when it's ready"
+            }
             className="rounded-md border border-gray-600 bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-600"
           >
-            {failed ? 'Close' : 'Cancel'}
+            {failed ? 'Close' : 'Continue in background'}
           </button>
         </div>
-        {!failed && (
-          <p className="mt-3 text-xs text-gray-500">
-            Cancelling keeps the request; it&apos;ll show up in the library when
-            it&apos;s ready.
-          </p>
-        )}
       </div>
     </div>
   );

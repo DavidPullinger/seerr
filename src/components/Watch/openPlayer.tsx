@@ -9,6 +9,7 @@ export interface PrepareTarget {
   mediaType: 'movie' | 'tv';
   tmdbId: number;
   seasonNumber?: number;
+  episodeNumber?: number;
   title?: string;
 }
 

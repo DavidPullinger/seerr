@@ -41,6 +41,12 @@ export interface WatchStatesResponse {
 
 export interface WatchEpisodeState extends WatchState {
   episodeNumber: number;
+  name?: string;
+  overview?: string;
+  /** YYYY-MM-DD */
+  airDate?: string;
+  /** Jellyfin has a still for it (Items/{jellyfinId}/Images/Primary). */
+  hasImage: boolean;
 }
 
 export interface WatchSeasonResponse {

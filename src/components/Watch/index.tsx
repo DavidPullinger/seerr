@@ -5,7 +5,7 @@ import { openPlayer } from '@app/components/Watch/openPlayer';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
 import { ArrowDownIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { CheckCircleIcon, PlayIcon } from '@heroicons/react/24/solid';
+import { PlayIcon } from '@heroicons/react/24/solid';
 import type {
   WatchEpisodeState,
   WatchHomeResponse,
@@ -20,7 +20,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 
 /** Watching needs a Seerr account linked to a Jellyfin user. */
-const useCanWatch = () => {
+export const useCanWatch = () => {
   const { user } = useUser();
   // /auth/me includes it; Seerr's client-side User type just doesn't list it.
   return !!(user as { jellyfinUserId?: string | null } | undefined)
@@ -35,7 +35,7 @@ export const useWatchStates = () => {
   }).data;
 };
 
-const useJellyfinBase = () =>
+export const useJellyfinBase = () =>
   useSettings().currentSettings.jellyfinExternalHost || '/jellyfin';
 
 async function playSeries(tmdbId: number) {
@@ -45,10 +45,14 @@ async function playSeries(tmdbId: number) {
   if (data.next) await openPlayer(data.next.jellyfinId);
 }
 
+/** Thin progress bar along the bottom of a picture; full when watched. */
 const ProgressBar = ({ progress }: { progress: number }) =>
-  progress > 0 && progress < 100 ? (
+  progress > 0 ? (
     <div className="absolute inset-x-0 bottom-0 h-1 bg-gray-900/70">
-      <div className="h-full bg-indigo-500" style={{ width: `${progress}%` }} />
+      <div
+        className="h-full bg-indigo-500"
+        style={{ width: `${Math.min(100, progress)}%` }}
+      />
     </div>
   ) : null;
 
@@ -149,16 +153,7 @@ export const CardWatchBadge = ({
         ? states?.tv[tmdbId]
         : undefined;
   if (!state) return null;
-  return (
-    <>
-      {state.played && (
-        <div className="pointer-events-none absolute bottom-2 right-2 z-30 rounded-full bg-gray-900/70 text-green-400">
-          <CheckCircleIcon className="h-6 w-6" />
-        </div>
-      )}
-      {!state.played && <ProgressBar progress={state.progress} />}
-    </>
-  );
+  return <ProgressBar progress={state.played ? 100 : state.progress} />;
 };
 
 /** Whether a title card gets the round action buttons (Play, Request). */
@@ -317,53 +312,4 @@ export const useSeasonWatch = (tvId: number, seasonNumber: number) => {
   const byEpisode: Record<number, WatchEpisodeState> = {};
   for (const e of data?.episodes ?? []) byEpisode[e.episodeNumber] = e;
   return byEpisode;
-};
-
-/** Click anywhere on an episode in the library to play it. */
-export const episodeRowProps = (state?: WatchEpisodeState) =>
-  state
-    ? {
-        role: 'button',
-        tabIndex: 0,
-        onClick: () => openPlayer(state.jellyfinId),
-        onKeyDown: (e: React.KeyboardEvent) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openPlayer(state.jellyfinId);
-          }
-        },
-        className:
-          'group -mx-2 cursor-pointer rounded-lg px-2 transition hover:bg-gray-700/40',
-      }
-    : { className: '' };
-
-/** On the episode still: play icon on hover, progress bar, watched tick. */
-export const EpisodeThumbOverlay = ({
-  state,
-}: {
-  state?: WatchEpisodeState;
-}) => {
-  if (!state) return null;
-  return (
-    <>
-      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-gray-900/40 opacity-0 transition group-hover:opacity-100">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-gray-900">
-          <PlayIcon className="ml-0.5 h-6 w-6" />
-        </span>
-      </div>
-      {state.played && (
-        <div className="absolute right-2 top-2 rounded-full bg-gray-900/70 text-green-400">
-          <CheckCircleIcon className="h-6 w-6" />
-        </div>
-      )}
-      {!state.played && state.progress > 0 && (
-        <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-lg bg-gray-900/70">
-          <div
-            className="h-full bg-indigo-500"
-            style={{ width: `${state.progress}%` }}
-          />
-        </div>
-      )}
-    </>
-  );
 };

@@ -224,7 +224,7 @@ watchRoutes.get(
     if (!id) return { episodes: [] };
     const res = await jellyfin(
       'GET',
-      `/Shows/${id}/Episodes?${qs({ userId: req.user.jellyfinUserId, season: Number(req.params.seasonNumber), enableImages: false })}`
+      `/Shows/${id}/Episodes?${qs({ userId: req.user.jellyfinUserId, season: Number(req.params.seasonNumber), fields: 'Overview' })}`
     );
     return {
       episodes: (res.Items as Json[])
@@ -234,6 +234,10 @@ watchRoutes.get(
           jellyfinId: e.Id,
           played: !!e.UserData?.Played,
           progress: progressOf(e),
+          name: e.Name,
+          overview: e.Overview,
+          airDate: e.PremiereDate?.slice(0, 10),
+          hasImage: !!e.ImageTags?.Primary,
         })),
     };
   })
@@ -285,7 +289,8 @@ watchRoutes.post(
     const tmdbId = Number(req.body?.tmdbId);
     if (!Number.isFinite(tmdbId) || tmdbId <= 0) throw new Error('bad tmdbId');
     const season = Number(req.body?.seasonNumber ?? 1) || 1;
-    return startPrepare(req.user, mediaType, tmdbId, season);
+    const episode = Number(req.body?.episodeNumber) || undefined;
+    return startPrepare(req.user, mediaType, tmdbId, season, episode);
   })
 );
 

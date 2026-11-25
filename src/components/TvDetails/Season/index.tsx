@@ -1,11 +1,8 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
-import {
-  EpisodeThumbOverlay,
-  episodeRowProps,
-  useSeasonWatch,
-} from '@app/components/Watch';
+import { useCanWatch } from '@app/components/Watch';
+import EpisodeList from '@app/components/Watch/EpisodeList';
 import defineMessages from '@app/utils/defineMessages';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
@@ -26,7 +23,7 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
   const { data, error } = useSWR<SeasonWithEpisodes>(
     `/api/v1/tv/${tvId}/season/${seasonNumber}`
   );
-  const watch = useSeasonWatch(tvId, seasonNumber);
+  const canWatch = useCanWatch();
 
   if (!data && !error) {
     return <LoadingSpinner />;
@@ -34,6 +31,17 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
 
   if (!data) {
     return <div>{intl.formatMessage(messages.somethingwentwrong)}</div>;
+  }
+
+  // Home-theatre fork: playable episode list for accounts linked to Jellyfin.
+  if (canWatch) {
+    return (
+      <EpisodeList
+        tvId={tvId}
+        seasonNumber={seasonNumber}
+        episodes={data.episodes}
+      />
+    );
   }
 
   return (
@@ -45,14 +53,10 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
           .slice()
           .reverse()
           .map((episode) => {
-            const { className: rowClass, ...rowProps } = episodeRowProps(
-              watch[episode.episodeNumber]
-            );
             return (
               <div
-                className={`flex flex-col space-y-4 py-4 xl:flex-row xl:space-x-4 xl:space-y-4 ${rowClass}`}
+                className="flex flex-col space-y-4 py-4 xl:flex-row xl:space-x-4 xl:space-y-4"
                 key={`season-${seasonNumber}-episode-${episode.episodeNumber}`}
-                {...rowProps}
               >
                 <div className="flex-1">
                   <div className="flex flex-col space-y-2 xl:flex-row xl:items-center xl:space-x-2 xl:space-y-0">
@@ -74,7 +78,6 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                       alt=""
                       fill
                     />
-                    <EpisodeThumbOverlay state={watch[episode.episodeNumber]} />
                   </div>
                 )}
               </div>

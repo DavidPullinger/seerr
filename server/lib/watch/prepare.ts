@@ -66,9 +66,10 @@ export function startPrepare(
   user: User,
   mediaType: MediaType,
   tmdbId: number,
-  seasonNumber = 1
+  seasonNumber = 1,
+  episodeNumber?: number
 ): PrepareStatus {
-  const id = `${user.id}-${mediaType}-${tmdbId}-${mediaType === MediaType.TV ? seasonNumber : 0}`;
+  const id = `${user.id}-${mediaType}-${tmdbId}-${mediaType === MediaType.TV ? `${seasonNumber}-${episodeNumber ?? 0}` : 0}`;
   const existing = jobs.get(id);
   if (existing && existing.stage !== 'failed' && existing.stage !== 'ready') {
     return prepareStatus(id, user.id);
@@ -83,7 +84,7 @@ export function startPrepare(
   jobs.set(id, job);
   const set = (patch: Partial<PrepareStatus>) =>
     Object.assign(job, patch, { updated: Date.now() });
-  run(user, mediaType, tmdbId, seasonNumber, set).catch((e) => {
+  run(user, mediaType, tmdbId, seasonNumber, episodeNumber, set).catch((e) => {
     logger.error('Preparing playback failed', {
       label: 'Watch',
       tmdbId,
@@ -138,7 +139,8 @@ async function request(
 async function findInJellyfin(
   mediaType: MediaType,
   path: string,
-  seasonNumber: number
+  seasonNumber: number,
+  episodeNumber?: number
 ): Promise<string | undefined> {
   const folder = path.replace(/\/+$/, '');
   const res = await jellyfin(
@@ -162,10 +164,13 @@ async function findInJellyfin(
     'GET',
     `/Shows/${item.Id}/Episodes?${qs({ season: seasonNumber, enableImages: false })}`
   );
-  const first = (eps.Items as Json[])
+  const onDisk = (eps.Items as Json[])
     .filter((e) => e.LocationType !== 'Virtual')
-    .sort((a, b) => (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0))[0];
-  return first?.Id;
+    .sort((a, b) => (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0));
+  if (episodeNumber !== undefined) {
+    return onDisk.find((e) => e.IndexNumber === episodeNumber)?.Id;
+  }
+  return onDisk[0]?.Id;
 }
 
 function arr(mediaType: MediaType, serviceId?: number | null) {
@@ -189,6 +194,7 @@ async function run(
   mediaType: MediaType,
   tmdbId: number,
   seasonNumber: number,
+  episodeNumber: number | undefined,
   set: (patch: Partial<PrepareStatus>) => void
 ) {
   const media = () =>
@@ -243,7 +249,12 @@ async function run(
       const episodes = (await sonarr.getEpisodes(externalId)).filter(
         (e) => e.seasonNumber === seasonNumber && e.episodeNumber > 0
       );
-      hasFile = episodes.some((e) => e.hasFile);
+      // A chosen episode: wait for that one; otherwise for any of the season.
+      hasFile = episodes.some(
+        (e) =>
+          e.hasFile &&
+          (episodeNumber === undefined || e.episodeNumber === episodeNumber)
+      );
       if (!hasFile) {
         queued = (await sonarr.getQueue()).filter(
           (q) => (q as Json).seriesId === externalId
@@ -256,7 +267,12 @@ async function run(
     }
 
     if (hasFile) {
-      const jellyfinId = await findInJellyfin(mediaType, folder, seasonNumber);
+      const jellyfinId = await findInJellyfin(
+        mediaType,
+        folder,
+        seasonNumber,
+        episodeNumber
+      );
       if (jellyfinId) {
         return set({ stage: 'ready', message: 'Ready', jellyfinId });
       }
