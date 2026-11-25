@@ -259,6 +259,9 @@ async function run(
   let lastNudge = 0;
   let lastScan = 0;
   let idleSince = 0;
+  // Series Play (no episode chosen) when the first episode can't be fetched: the
+  // earliest one that did arrive.
+  let fallbackTo: number | undefined;
   while (Date.now() - started < TIMEOUT_MS) {
     const m = await media();
     const externalId = m?.externalServiceId;
@@ -271,6 +274,11 @@ async function run(
     let folder = '';
     let hasFile = false;
     let queued: Json[] = [];
+    // Series: the episode to play, whether other episodes are still on their way, and
+    // the earliest one already on disk.
+    let target: number | undefined;
+    let othersQueued = false;
+    let earliestOnDisk: number | undefined;
     if (mediaType === MediaType.MOVIE) {
       const radarr = arr(mediaType, m.serviceId) as RadarrAPI;
       const movie = await radarr.getMovie({ id: externalId });
@@ -299,16 +307,28 @@ async function run(
       const episodes = (await sonarr.getEpisodes(externalId)).filter(
         (e) => e.seasonNumber === seasonNumber && e.episodeNumber > 0
       );
-      // A chosen episode: wait for that one; otherwise for any of the season.
-      hasFile = episodes.some(
-        (e) =>
-          e.hasFile &&
-          (episodeNumber === undefined || e.episodeNumber === episodeNumber)
+      // Wait for the chosen episode, or else the season's first aired one (not whichever
+      // happens to arrive first: single-episode releases come in any order).
+      const byNumber = [...episodes].sort(
+        (a, b) => a.episodeNumber - b.episodeNumber
       );
+      const aired = byNumber.filter(
+        (e) => e.airDateUtc && Date.parse(e.airDateUtc) <= Date.now()
+      );
+      target =
+        fallbackTo ?? episodeNumber ?? (aired[0] ?? byNumber[0])?.episodeNumber;
+      const targetEp = byNumber.find((e) => e.episodeNumber === target);
+      earliestOnDisk = byNumber.find((e) => e.hasFile)?.episodeNumber;
+      hasFile = !!targetEp?.hasFile;
       if (!hasFile) {
-        queued = (await sonarr.getQueue()).filter(
+        const seriesQueue = (await sonarr.getQueue()).filter(
           (q) => (q as Json).seriesId === externalId
         );
+        // A season pack is one record per episode, so this catches those too.
+        queued = seriesQueue.filter(
+          (q) => (q as Json).episodeId === targetEp?.id
+        );
+        othersQueued = seriesQueue.length > queued.length;
       }
       if (!hasFile && !queued.length && needSearch) {
         needSearch = false;
@@ -336,7 +356,7 @@ async function run(
         mediaType,
         folder,
         seasonNumber,
-        episodeNumber
+        target
       );
       if (jellyfinId) {
         return set({ stage: 'ready', message: 'Ready', jellyfinId });
@@ -366,12 +386,29 @@ async function run(
       const waited = Math.round((Date.now() - started) / 1000);
       // The search finished and nothing was grabbed (none found, or Real-Debrid refused
       // them): say so rather than spinning until the timeout.
-      if (waited > 30 && !(await searching(mediaType, m.serviceId))) {
+      // (Other episodes still downloading may be earlier ones: wait for those too.)
+      if (
+        waited > 30 &&
+        !othersQueued &&
+        !(await searching(mediaType, m.serviceId))
+      ) {
         idleSince ||= Date.now();
         if (Date.now() - idleSince > 20000) {
+          if (
+            episodeNumber === undefined &&
+            fallbackTo === undefined &&
+            earliestOnDisk !== undefined
+          ) {
+            fallbackTo = earliestOnDisk;
+            continue;
+          }
+          const what =
+            mediaType === MediaType.TV && target !== undefined
+              ? `Episode ${target}: no`
+              : 'No';
           return set({
             stage: 'failed',
-            message: `No release could be fetched right now (none found, or Real-Debrid refused them). It's requested, so ${mediaType === MediaType.MOVIE ? 'Radarr' : 'Sonarr'} will keep looking and it'll show up in the library.`,
+            message: `${what} release could be fetched right now (none found, or Real-Debrid refused them). It's requested, so ${mediaType === MediaType.MOVIE ? 'Radarr' : 'Sonarr'} will keep looking and it'll show up in the library.`,
           });
         }
       } else {
