@@ -692,6 +692,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
             <WatchPlayButton
               mediaType="tv"
               tmdbId={data.id}
+              title={data.name}
               fallback={<PlayButton links={mediaLinks} />}
             />
           </div>

@@ -15,62 +15,19 @@ import type {
   WatchStatesResponse,
 } from '@server/interfaces/api/watchInterfaces';
 import { getSettings } from '@server/lib/settings';
+import type { Json } from '@server/lib/watch/jellyfin';
+import {
+  JellyfinError,
+  clientAuth,
+  jellyfin,
+  qs,
+} from '@server/lib/watch/jellyfin';
+import { prepareStatus, startPrepare } from '@server/lib/watch/prepare';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
-import { getHostname } from '@server/utils/getHostname';
 import { Router } from 'express';
 
 const watchRoutes = Router();
-
-class JellyfinError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-  }
-}
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Json = any;
-
-const clientAuth = (device: string, deviceId: string, token?: string) =>
-  `MediaBrowser Client="Seerr", Device="${device}", DeviceId="${deviceId}", Version="1.0"` +
-  (token ? `, Token="${token}"` : '');
-
-async function jellyfin(
-  method: string,
-  path: string,
-  { auth, body }: { auth?: string; body?: unknown } = {}
-): Promise<Json> {
-  const settings = getSettings();
-  const res = await fetch(`${getHostname()}${path}`, {
-    method,
-    headers: {
-      Authorization:
-        auth ?? clientAuth('Seerr', 'seerr-watch', settings.jellyfin.apiKey),
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) {
-    throw new JellyfinError(
-      res.status,
-      `Jellyfin ${method} ${path.split('?')[0]}: ${res.status}`
-    );
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-const qs = (params: Record<string, string | number | boolean | undefined>) =>
-  new URLSearchParams(
-    Object.entries(params)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, String(v)])
-  ).toString();
 
 const tmdbOf = (item: Json): number | undefined => {
   const id = Number(item?.ProviderIds?.Tmdb);
@@ -317,6 +274,24 @@ watchRoutes.get(
       },
     };
   })
+);
+
+// "Play" on something not in the library yet: request it and hurry it along.
+watchRoutes.post(
+  '/prepare',
+  handle(async (req) => {
+    const mediaType =
+      req.body?.mediaType === 'tv' ? MediaType.TV : MediaType.MOVIE;
+    const tmdbId = Number(req.body?.tmdbId);
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) throw new Error('bad tmdbId');
+    const season = Number(req.body?.seasonNumber ?? 1) || 1;
+    return startPrepare(req.user, mediaType, tmdbId, season);
+  })
+);
+
+watchRoutes.get(
+  '/prepare/:id',
+  handle(async (req) => prepareStatus(String(req.params.id), req.user.id))
 );
 
 export default watchRoutes;

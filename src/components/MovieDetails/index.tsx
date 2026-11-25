@@ -636,6 +636,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             <WatchPlayButton
               mediaType="movie"
               tmdbId={data.id}
+              title={data.title}
               fallback={<PlayButton links={mediaLinks} />}
             />
           </div>

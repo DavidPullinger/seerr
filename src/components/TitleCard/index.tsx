@@ -559,7 +559,11 @@ const TitleCard = ({
               </Link>
 
               <div className="absolute bottom-0 left-0 right-0 flex justify-between gap-1 px-2 py-2">
-                <CardPlayButton tmdbId={id} mediaType={mediaType} />
+                <CardPlayButton
+                  tmdbId={id}
+                  mediaType={mediaType}
+                  title={title}
+                />
                 {showRequestButton &&
                   (!currentStatus ||
                     currentStatus === MediaStatus.UNKNOWN ||

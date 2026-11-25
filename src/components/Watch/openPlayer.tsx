@@ -4,7 +4,17 @@ import { mutate } from 'swr';
 
 let close: (() => void) | null = null;
 
-export async function openPlayer(jellyfinId: string): Promise<void> {
+/** Something not in the library yet: request it and play once it's there. */
+export interface PrepareTarget {
+  mediaType: 'movie' | 'tv';
+  tmdbId: number;
+  seasonNumber?: number;
+  title?: string;
+}
+
+export async function openPlayer(
+  target: string | { prepare: PrepareTarget }
+): Promise<void> {
   close?.();
   const [{ createRoot }, { default: Player }] = await Promise.all([
     import('react-dom/client'),
@@ -27,5 +37,11 @@ export async function openPlayer(jellyfinId: string): Promise<void> {
       { revalidate: true }
     );
   };
-  root.render(<Player jellyfinId={jellyfinId} onClose={() => close?.()} />);
+  root.render(
+    typeof target === 'string' ? (
+      <Player jellyfinId={target} onClose={() => close?.()} />
+    ) : (
+      <Player prepare={target.prepare} onClose={() => close?.()} />
+    )
+  );
 }

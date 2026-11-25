@@ -1,6 +1,7 @@
 // Home-theatre fork: the full-screen player opened from Seerr's Play buttons.
 import type { Json, Toast } from '@app/components/Watch/engine';
 import { Engine, clock } from '@app/components/Watch/engine';
+import type { PrepareTarget } from '@app/components/Watch/openPlayer';
 import {
   ArrowLeftIcon,
   ArrowUturnLeftIcon,
@@ -17,12 +18,153 @@ import {
   SpeakerXMarkIcon,
 } from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
+import type { PrepareStatus } from '@server/lib/watch/prepare';
+import axios from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface PlayerProps {
-  jellyfinId: string;
+  jellyfinId?: string;
+  prepare?: PrepareTarget;
   onClose: () => void;
 }
+
+const STEPS: [PrepareStatus['stage'], string][] = [
+  ['requesting', 'Request'],
+  ['searching', 'Find a release'],
+  ['downloading', 'Fetch from Real-Debrid'],
+  ['importing', 'Import'],
+  ['adding', 'Add to the library'],
+];
+
+/** Shown while something not yet in the library is requested and fetched. */
+const Preparing = ({
+  target,
+  onReady,
+  onClose,
+}: {
+  target: PrepareTarget;
+  onReady: (jellyfinId: string) => void;
+  onClose: () => void;
+}) => {
+  const [status, setStatus] = useState<PrepareStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async (id: string) => {
+      try {
+        const { data } = await axios.get<PrepareStatus>(
+          `/api/v1/watch/prepare/${encodeURIComponent(id)}`
+        );
+        if (stopped) return;
+        setStatus(data);
+        if (data.stage === 'ready' && data.jellyfinId) onReady(data.jellyfinId);
+        else if (data.stage !== 'failed')
+          timer = setTimeout(() => poll(id), 1500);
+      } catch (e) {
+        if (!stopped) setError((e as Error).message);
+      }
+    };
+    axios
+      .post<PrepareStatus>('/api/v1/watch/prepare', target)
+      .then(({ data }) => {
+        if (stopped) return;
+        setStatus(data);
+        if (data.stage === 'ready' && data.jellyfinId) onReady(data.jellyfinId);
+        else poll(data.id);
+      })
+      .catch((e) =>
+        setError(
+          e?.response?.data?.error ?? e?.response?.data?.message ?? e.message
+        )
+      );
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [target, onReady]);
+
+  const failed = error || status?.stage === 'failed';
+  const current = STEPS.findIndex(([s]) => s === status?.stage);
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900 p-4">
+      <div className="w-full max-w-md rounded-lg border border-gray-700 bg-gray-800 p-6 shadow-2xl">
+        <div className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
+          Getting it ready
+        </div>
+        <h2 className="mt-1 text-xl font-bold text-white">
+          {target.title ?? 'Loading'}
+          {target.mediaType === 'tv' && (
+            <span className="ml-2 text-base font-normal text-gray-400">
+              Season {target.seasonNumber ?? 1}
+            </span>
+          )}
+        </h2>
+        <ol className="mt-4 space-y-2">
+          {STEPS.map(([stage, label], i) => {
+            const done = current > i || status?.stage === 'ready';
+            const active = current === i && !failed;
+            return (
+              <li
+                key={stage}
+                className={`flex items-center gap-3 text-sm ${done ? 'text-gray-300' : active ? 'text-white' : 'text-gray-500'}`}
+              >
+                <span className="flex h-5 w-5 items-center justify-center">
+                  {done ? (
+                    <CheckIcon className="h-5 w-5 text-green-400" />
+                  ) : active ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-indigo-500" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-gray-600" />
+                  )}
+                </span>
+                <span>{active ? status?.message : label}</span>
+              </li>
+            );
+          })}
+        </ol>
+        {status?.stage === 'downloading' && (
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-700">
+            <div
+              className="h-full bg-indigo-500 transition-all"
+              style={{ width: `${status.progress ?? 0}%` }}
+            />
+          </div>
+        )}
+        {failed && (
+          <p className="mt-4 text-sm text-red-300">
+            {error ?? status?.message}
+          </p>
+        )}
+        <div className="mt-5 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-gray-600 bg-gray-700 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-gray-600"
+          >
+            {failed ? 'Close' : 'Cancel'}
+          </button>
+        </div>
+        {!failed && (
+          <p className="mt-3 text-xs text-gray-500">
+            Cancelling keeps the request; it&apos;ll show up in the library when
+            it&apos;s ready.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Player = ({ jellyfinId, prepare, onClose }: PlayerProps) => {
+  const [readyId, setReadyId] = useState<string | undefined>(jellyfinId);
+  if (!readyId && prepare) {
+    return (
+      <Preparing target={prepare} onReady={setReadyId} onClose={onClose} />
+    );
+  }
+  return <PlayerView jellyfinId={readyId ?? ''} onClose={onClose} />;
+};
 
 const store = {
   get<T>(key: string): T | null {
@@ -67,7 +209,13 @@ const IconButton = ({
   </button>
 );
 
-const Player = ({ jellyfinId, onClose }: PlayerProps) => {
+const PlayerView = ({
+  jellyfinId,
+  onClose,
+}: {
+  jellyfinId: string;
+  onClose: () => void;
+}) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const seekRef = useRef<HTMLDivElement>(null);

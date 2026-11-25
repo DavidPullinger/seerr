@@ -164,19 +164,19 @@ export const CardWatchBadge = ({
 export const CardPlayButton = ({
   tmdbId,
   mediaType,
+  title,
 }: {
   tmdbId: number;
   mediaType: string;
+  title: string;
 }) => {
+  const canWatch = useCanWatch();
   const states = useWatchStates();
   const [busy, setBusy] = useState(false);
+  if (!canWatch || !states || (mediaType !== 'movie' && mediaType !== 'tv'))
+    return null;
   const state =
-    mediaType === 'movie'
-      ? states?.movie[tmdbId]
-      : mediaType === 'tv'
-        ? states?.tv[tmdbId]
-        : undefined;
-  if (!state) return null;
+    mediaType === 'movie' ? states.movie[tmdbId] : states.tv[tmdbId];
   return (
     <Button
       buttonType="primary"
@@ -188,7 +188,11 @@ export const CardPlayButton = ({
         e.stopPropagation();
         setBusy(true);
         try {
-          if (mediaType === 'movie') await openPlayer(state.jellyfinId);
+          if (!state)
+            await openPlayer({
+              prepare: { mediaType, tmdbId, title },
+            });
+          else if (mediaType === 'movie') await openPlayer(state.jellyfinId);
           else await playSeries(tmdbId);
         } finally {
           setBusy(false);
@@ -197,7 +201,7 @@ export const CardPlayButton = ({
     >
       <PlayIcon />
       <span>
-        {mediaType === 'movie' && state.progress > 0 && !state.played
+        {mediaType === 'movie' && state && state.progress > 0 && !state.played
           ? 'Resume'
           : 'Play'}
       </span>
@@ -210,10 +214,12 @@ export const CardPlayButton = ({
 export const WatchPlayButton = ({
   mediaType,
   tmdbId,
+  title,
   fallback,
 }: {
   mediaType: 'movie' | 'tv';
   tmdbId: number;
+  title: string;
   fallback?: React.ReactNode;
 }) => {
   const canWatch = useCanWatch();
@@ -236,7 +242,12 @@ export const WatchPlayButton = ({
     label = `${n.resume ? 'Resume' : 'Play'} S${n.season ?? 0} E${n.episode ?? 0}`;
     play = () => openPlayer(n.jellyfinId);
   }
-  if (!label || !play) return null;
+  if (!label || !play) {
+    // Not in the library (yet): request it and play as soon as it's there.
+    if (!states || (mediaType === 'tv' && !next)) return null;
+    label = 'Play';
+    play = () => openPlayer({ prepare: { mediaType, tmdbId, title } });
+  }
   return (
     <Button buttonType="primary" onClick={() => play?.()}>
       <PlayIcon />
