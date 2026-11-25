@@ -1,6 +1,7 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import { EpisodePlay, useSeasonWatch } from '@app/components/Watch';
 import defineMessages from '@app/utils/defineMessages';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
 import { useIntl } from 'react-intl';
@@ -21,6 +22,7 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
   const { data, error } = useSWR<SeasonWithEpisodes>(
     `/api/v1/tv/${tvId}/season/${seasonNumber}`
   );
+  const watch = useSeasonWatch(tvId, seasonNumber);
 
   if (!data && !error) {
     return <LoadingSpinner />;
@@ -54,6 +56,7 @@ const Season = ({ seasonNumber, tvId }: SeasonProps) => {
                     )}
                   </div>
                   {episode.overview && <p>{episode.overview}</p>}
+                  <EpisodePlay state={watch[episode.episodeNumber]} />
                 </div>
                 {episode.stillPath && (
                   <div className="relative aspect-video xl:h-32">

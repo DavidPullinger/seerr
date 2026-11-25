@@ -22,6 +22,7 @@ import PersonCard from '@app/components/PersonCard';
 import RequestButton from '@app/components/RequestButton';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
+import { WatchPlayButton } from '@app/components/Watch';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
@@ -632,7 +633,11 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
               </>
             )}
           <div className="z-20">
-            <PlayButton links={mediaLinks} />
+            <WatchPlayButton
+              mediaType="movie"
+              tmdbId={data.id}
+              fallback={<PlayButton links={mediaLinks} />}
+            />
           </div>
           <RequestButton
             mediaType="movie"

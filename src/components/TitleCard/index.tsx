@@ -7,6 +7,7 @@ import Tooltip from '@app/components/Common/Tooltip';
 import RequestModal from '@app/components/RequestModal';
 import ErrorCard from '@app/components/TitleCard/ErrorCard';
 import Placeholder from '@app/components/TitleCard/Placeholder';
+import { CardPlayButton, CardWatchBadge } from '@app/components/Watch';
 import { useIsTouch } from '@app/hooks/useIsTouch';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, UserType, useUser } from '@app/hooks/useUser';
@@ -468,6 +469,7 @@ const TitleCard = ({
               </div>
             )}
           </div>
+          <CardWatchBadge tmdbId={id} mediaType={mediaType} />
           <Transition
             as={Fragment}
             show={isUpdating}
@@ -556,7 +558,8 @@ const TitleCard = ({
                 </div>
               </Link>
 
-              <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2 py-2">
+              <div className="absolute bottom-0 left-0 right-0 flex justify-between gap-1 px-2 py-2">
+                <CardPlayButton tmdbId={id} mediaType={mediaType} />
                 {showRequestButton &&
                   (!currentStatus ||
                     currentStatus === MediaStatus.UNKNOWN ||

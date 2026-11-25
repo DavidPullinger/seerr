@@ -14,6 +14,7 @@ import StudioSlider from '@app/components/Discover/StudioSlider';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
 import { sliderTitles } from '@app/components/Discover/constants';
 import MediaSlider from '@app/components/MediaSlider';
+import { ContinueWatchingSlider } from '@app/components/Watch';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
 import useToasts from '@app/hooks/useToasts';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -208,6 +209,7 @@ const Discover = () => {
           </Transition>
         </>
       )}
+      {!isEditing && <ContinueWatchingSlider />}
       {(isEditing ? sliders : discoverData)?.map((slider, index) => {
         let sliderComponent: React.ReactNode;
 

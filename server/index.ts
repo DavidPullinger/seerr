@@ -20,10 +20,12 @@ import WebPushAgent from '@server/lib/notifications/agents/webpush';
 import checkOverseerrMerge from '@server/lib/overseerrMerge';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { checkUser } from '@server/middleware/auth';
 import clearCookies from '@server/middleware/clearcookies';
 import routes from '@server/routes';
 import avatarproxy from '@server/routes/avatarproxy';
 import imageproxy from '@server/routes/imageproxy';
+import watchRoutes from '@server/routes/watch';
 import { appDataPermissions } from '@server/utils/appDataVolume';
 import { getAppVersion } from '@server/utils/appVersion';
 import createCustomProxyAgent, {
@@ -236,6 +238,8 @@ app
     const apiSpecContent = await fs.readFile(API_SPEC_PATH, 'utf-8');
     const apiDocs = yaml.load(apiSpecContent) as Record<string, unknown>;
     server.use('/api-docs', swaggerUi.serve, swaggerUi.setup(apiDocs));
+    // Home-theatre fork: /api/v1/watch isn't in seerr-api.yml, so it goes before the validator.
+    server.use('/api/v1/watch', checkUser, watchRoutes);
     server.use(
       OpenApiValidator.middleware({
         apiSpec: API_SPEC_PATH,
