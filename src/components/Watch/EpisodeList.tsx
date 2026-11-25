@@ -47,6 +47,10 @@ const useBlurUnwatched = (): [boolean, (on: boolean) => void] => {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GENERIC_NAME = /^Episode \d+$/i;
+// Jellyfin names episodes it has no metadata for after the file, e.g. "show.name.s01e29".
+const FILE_NAME = /[._]s\d+e\d+/i;
+const jellyfinName = (w: WatchEpisodeState) =>
+  w.name && !FILE_NAME.test(w.name) ? w.name : `Episode ${w.episodeNumber}`;
 
 type Row = {
   episodeNumber: number;
@@ -72,8 +76,8 @@ function merge(
     rows.set(e.episodeNumber, {
       episodeNumber: e.episodeNumber,
       name:
-        w?.name && GENERIC_NAME.test(e.name) && !GENERIC_NAME.test(w.name)
-          ? w.name
+        w && GENERIC_NAME.test(e.name) && !GENERIC_NAME.test(jellyfinName(w))
+          ? jellyfinName(w)
           : e.name,
       overview: e.overview || w?.overview,
       airDate: e.airDate ?? w?.airDate,
@@ -87,7 +91,7 @@ function merge(
     if (!rows.has(w.episodeNumber)) {
       rows.set(w.episodeNumber, {
         episodeNumber: w.episodeNumber,
-        name: w.name ?? `Episode ${w.episodeNumber}`,
+        name: jellyfinName(w),
         overview: w.overview,
         airDate: w.airDate,
         watch: w,

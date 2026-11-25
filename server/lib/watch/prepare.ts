@@ -104,7 +104,7 @@ async function request(
   mediaType: MediaType,
   tmdbId: number,
   seasonNumber: number
-) {
+): Promise<boolean> {
   try {
     const req = await MediaRequest.request(
       {
@@ -119,13 +119,14 @@ async function request(
         'Requested. It needs approving before it can be fetched.'
       );
     }
+    return true;
   } catch (e) {
     // Already requested (or already there): carry on and wait for it.
     if (
       e instanceof DuplicateMediaRequestError ||
       e instanceof NoSeasonsAvailableError
     ) {
-      return;
+      return false;
     }
     throw e;
   }
@@ -173,7 +174,7 @@ async function findInJellyfin(
   return onDisk[0]?.Id;
 }
 
-function arr(mediaType: MediaType, serviceId?: number | null) {
+function arrServer(mediaType: MediaType, serviceId?: number | null) {
   const settings = getSettings();
   const servers =
     mediaType === MediaType.MOVIE ? settings.radarr : settings.sonarr;
@@ -182,11 +183,50 @@ function arr(mediaType: MediaType, serviceId?: number | null) {
     servers.find((s) => s.isDefault && !s.is4k) ??
     servers[0];
   if (!server) throw new Error('No Radarr/Sonarr server is set up in Seerr.');
+  return server;
+}
+
+function arr(mediaType: MediaType, serviceId?: number | null) {
+  const server = arrServer(mediaType, serviceId);
   const Api = mediaType === MediaType.MOVIE ? RadarrAPI : SonarrAPI;
   return new Api({
     apiKey: server.apiKey,
     url: Api.buildUrl(server, '/api/v3'),
   });
+}
+
+/** Run a Radarr/Sonarr command (e.g. a search). */
+async function command(
+  mediaType: MediaType,
+  serviceId: number | null | undefined,
+  body: Record<string, unknown>
+) {
+  const server = arrServer(mediaType, serviceId);
+  await fetch(RadarrAPI.buildUrl(server, '/api/v3/command'), {
+    method: 'POST',
+    headers: { 'X-Api-Key': server.apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000),
+  });
+}
+
+/** Is Radarr/Sonarr still running (or about to run) a search? */
+async function searching(mediaType: MediaType, serviceId?: number | null) {
+  const server = arrServer(mediaType, serviceId);
+  try {
+    const res = await fetch(RadarrAPI.buildUrl(server, '/api/v3/command'), {
+      headers: { 'X-Api-Key': server.apiKey },
+      signal: AbortSignal.timeout(10000),
+    });
+    const commands = (await res.json()) as Json[];
+    return commands.some(
+      (c) =>
+        /Search/i.test(c.name) &&
+        (c.status === 'queued' || c.status === 'started')
+    );
+  } catch {
+    return true; // can't tell: keep waiting
+  }
 }
 
 async function run(
@@ -211,11 +251,14 @@ async function run(
   }
 
   set({ stage: 'requesting', message: 'Requesting…' });
-  await request(user, mediaType, tmdbId, seasonNumber);
+  // Already requested (e.g. an episode that never arrived): nothing new will search,
+  // so ask for a search ourselves, once.
+  let needSearch = !(await request(user, mediaType, tmdbId, seasonNumber));
 
   const started = Date.now();
   let lastNudge = 0;
   let lastScan = 0;
+  let idleSince = 0;
   while (Date.now() - started < TIMEOUT_MS) {
     const m = await media();
     const externalId = m?.externalServiceId;
@@ -238,6 +281,13 @@ async function run(
           (q) => q.movieId === movie.id
         );
       }
+      if (!hasFile && !queued.length && needSearch) {
+        needSearch = false;
+        await command(mediaType, m.serviceId, {
+          name: 'MoviesSearch',
+          movieIds: [movie.id],
+        });
+      }
       if (!hasFile && queued.length && Date.now() - lastNudge > 5000) {
         lastNudge = Date.now();
         await radarr.refreshMonitoredDownloads();
@@ -259,6 +309,21 @@ async function run(
         queued = (await sonarr.getQueue()).filter(
           (q) => (q as Json).seriesId === externalId
         );
+      }
+      if (!hasFile && !queued.length && needSearch) {
+        needSearch = false;
+        const wanted = episodes.filter(
+          (e) =>
+            !e.hasFile &&
+            (episodeNumber === undefined || e.episodeNumber === episodeNumber)
+        );
+        if (wanted.length) {
+          await sonarr.monitorEpisodes(wanted.map((e) => e.id));
+          await command(mediaType, m.serviceId, {
+            name: 'EpisodeSearch',
+            episodeIds: wanted.map((e) => e.id),
+          });
+        }
       }
       if (!hasFile && queued.length && Date.now() - lastNudge > 5000) {
         lastNudge = Date.now();
@@ -299,6 +364,19 @@ async function run(
       );
     } else {
       const waited = Math.round((Date.now() - started) / 1000);
+      // The search finished and nothing was grabbed (none found, or Real-Debrid refused
+      // them): say so rather than spinning until the timeout.
+      if (waited > 30 && !(await searching(mediaType, m.serviceId))) {
+        idleSince ||= Date.now();
+        if (Date.now() - idleSince > 20000) {
+          return set({
+            stage: 'failed',
+            message: `No release could be fetched right now (none found, or Real-Debrid refused them). It's requested, so ${mediaType === MediaType.MOVIE ? 'Radarr' : 'Sonarr'} will keep looking and it'll show up in the library.`,
+          });
+        }
+      } else {
+        idleSince = 0;
+      }
       set({
         stage: 'searching',
         message:
