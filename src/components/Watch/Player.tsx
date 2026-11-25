@@ -273,9 +273,12 @@ const PlayerView = ({
     };
   }, [rerender, toast]);
 
+  // Uses the engine from this render (null until the effect above has made one), so the
+  // item is opened once, not once on mount and again when the engine appears.
   useEffect(() => {
+    if (!engine) return;
     setUpNext(null);
-    engineRef.current?.open(itemId);
+    engine.open(itemId);
   }, [itemId, engine]);
 
   const wake = useCallback(() => {

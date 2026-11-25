@@ -130,27 +130,32 @@ async function request(
   }
 }
 
-/** Find the film or the season's first episode in Jellyfin, by TMDB/TVDB id. */
+/**
+ * Find the film or the season's first episode in Jellyfin by where Radarr/Sonarr put it
+ * (every container sees the media at the same path). Works before Jellyfin has fetched
+ * metadata, which can take a while after the scan.
+ */
 async function findInJellyfin(
   mediaType: MediaType,
-  title: string,
-  ids: { tmdbId: number; tvdbId?: number },
+  path: string,
   seasonNumber: number
 ): Promise<string | undefined> {
+  const folder = path.replace(/\/+$/, '');
   const res = await jellyfin(
     'GET',
     `/Items?${qs({
       recursive: true,
       includeItemTypes: mediaType === MediaType.MOVIE ? 'Movie' : 'Series',
-      searchTerm: title,
-      fields: 'ProviderIds',
+      fields: 'Path',
+      sortBy: 'DateCreated',
+      sortOrder: 'Descending',
       enableImages: false,
     })}`
   );
   const item = (res.Items as Json[]).find(
     (i) =>
-      Number(i.ProviderIds?.Tmdb) === ids.tmdbId ||
-      (ids.tvdbId && Number(i.ProviderIds?.Tvdb) === ids.tvdbId)
+      typeof i.Path === 'string' &&
+      (i.Path === folder || i.Path.startsWith(`${folder}/`))
   );
   if (!item || mediaType === MediaType.MOVIE) return item?.Id;
   const eps = await jellyfin(
@@ -214,13 +219,13 @@ async function run(
       continue;
     }
 
-    let title = '';
+    let folder = '';
     let hasFile = false;
     let queued: Json[] = [];
     if (mediaType === MediaType.MOVIE) {
       const radarr = arr(mediaType, m.serviceId) as RadarrAPI;
       const movie = await radarr.getMovie({ id: externalId });
-      title = movie.title;
+      folder = movie.path;
       hasFile = movie.hasFile;
       if (!hasFile) {
         queued = (await radarr.getQueue()).filter(
@@ -234,7 +239,7 @@ async function run(
     } else {
       const sonarr = arr(mediaType, m.serviceId) as SonarrAPI;
       const series = await sonarr.getSeriesById(externalId);
-      title = series.title;
+      folder = series.path;
       const episodes = (await sonarr.getEpisodes(externalId)).filter(
         (e) => e.seasonNumber === seasonNumber && e.episodeNumber > 0
       );
@@ -251,17 +256,14 @@ async function run(
     }
 
     if (hasFile) {
-      const jellyfinId = await findInJellyfin(
-        mediaType,
-        title,
-        { tmdbId, tvdbId: m.tvdbId ?? undefined },
-        seasonNumber
-      );
+      const jellyfinId = await findInJellyfin(mediaType, folder, seasonNumber);
       if (jellyfinId) {
         return set({ stage: 'ready', message: 'Ready', jellyfinId });
       }
       set({ stage: 'adding', message: 'Adding to the library…' });
-      if (Date.now() - lastScan > 20000) {
+      // One scan; a second only if it still isn't there a minute later. (Each refresh
+      // cancels a scan in progress, so asking repeatedly would keep it from finishing.)
+      if (!lastScan || Date.now() - lastScan > 60000) {
         lastScan = Date.now();
         await jellyfin('POST', '/Library/Refresh');
       }
