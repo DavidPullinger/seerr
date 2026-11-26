@@ -215,37 +215,46 @@ const EpisodeList = ({
                   : 'cursor-not-allowed'
               }`}
             >
-              <div
-                className={`relative aspect-video w-36 flex-shrink-0 overflow-hidden rounded-lg bg-gray-700 sm:w-44 ${
-                  r.state === 'upcoming' ? 'opacity-40' : ''
-                }`}
-              >
-                {image}
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-900/50 opacity-0 transition group-hover:opacity-100">
-                  {r.state === 'playable' && (
+              <div className="relative aspect-video w-36 flex-shrink-0 overflow-hidden rounded-lg bg-gray-700 sm:w-44">
+                <div
+                  className={`absolute inset-0 ${
+                    r.state === 'playable'
+                      ? ''
+                      : r.state === 'missing'
+                        ? 'opacity-50 grayscale transition group-hover:opacity-70'
+                        : 'opacity-30 grayscale'
+                  }`}
+                >
+                  {image}
+                </div>
+                {r.state === 'playable' ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 opacity-0 transition group-hover:opacity-100">
                     <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900">
                       <PlayIcon className="ml-0.5 h-6 w-6" />
                     </span>
-                  )}
-                  {r.state === 'missing' && (
-                    <>
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-gray-300 bg-gray-900/60 text-white">
-                        <ArrowDownTrayIcon className="h-5 w-5" />
-                      </span>
-                      <span className="text-xs font-medium text-white">
-                        Not on disk
-                      </span>
-                    </>
-                  )}
-                  {r.state === 'upcoming' && (
-                    <>
-                      <ClockIcon className="h-7 w-7 text-gray-200" />
-                      <span className="text-xs font-medium text-gray-100">
-                        Not available yet
-                      </span>
-                    </>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  // Always shown, so missing episodes stand out without hovering each one.
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gray-900/40">
+                    {r.state === 'missing' ? (
+                      <>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-gray-300 bg-gray-900/60 text-white transition group-hover:h-11 group-hover:w-11 group-hover:border-white">
+                          <ArrowDownTrayIcon className="h-4 w-4 group-hover:h-5 group-hover:w-5" />
+                        </span>
+                        <span className="text-xs font-medium text-white">
+                          Not on disk
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <ClockIcon className="h-6 w-6 text-gray-300" />
+                        <span className="text-xs font-medium text-gray-300">
+                          Not available yet
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
                 {progress > 0 && (
                   <div className="absolute inset-x-0 bottom-0 h-1 bg-gray-900/70">
                     <div

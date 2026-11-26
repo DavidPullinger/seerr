@@ -4,7 +4,11 @@ import Slider from '@app/components/Slider';
 import { openPlayer } from '@app/components/Watch/openPlayer';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
-import { ArrowDownIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowDownIcon,
+  ChevronDownIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
 import type {
   WatchEpisodeState,
@@ -17,7 +21,7 @@ import type {
 import axios from 'axios';
 import Link from 'next/link';
 import { useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 
 /** Watching needs a Seerr account linked to a Jellyfin user. */
 export const useCanWatch = () => {
@@ -58,6 +62,28 @@ const ProgressBar = ({ progress }: { progress: number }) =>
 
 // --- Discover: Continue Watching ----------------------------------------------
 
+/** ✕ on a card: drop it from the row now, then tell the server. */
+const removeFromContinueWatching = async (item: WatchItem) => {
+  const key = '/api/v1/watch/home';
+  await mutate<WatchHomeResponse>(
+    key,
+    async (current) => {
+      await axios.post('/api/v1/watch/hide', { jellyfinId: item.jellyfinId });
+      return current;
+    },
+    {
+      optimisticData: (current) => ({
+        continueWatching: (current?.continueWatching ?? []).filter(
+          (i) => i.jellyfinId !== item.jellyfinId
+        ),
+      }),
+      rollbackOnError: true,
+      populateCache: false,
+      revalidate: true,
+    }
+  ).catch(() => undefined);
+};
+
 const ContinueCard = ({ item }: { item: WatchItem }) => {
   const base = useJellyfinBase();
   const href = item.tmdbId
@@ -93,6 +119,15 @@ const ContinueCard = ({ item }: { item: WatchItem }) => {
           <div className="truncate text-xs text-gray-300">{item.subtitle}</div>
         )}
       </div>
+      <button
+        type="button"
+        title="Remove from Continue Watching"
+        aria-label={`Remove ${item.title} from Continue Watching`}
+        onClick={() => removeFromContinueWatching(item)}
+        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-gray-300 bg-gray-900/60 text-white opacity-0 transition hover:scale-110 hover:border-white focus:opacity-100 group-hover:opacity-100"
+      >
+        <XMarkIcon className="h-4 w-4" />
+      </button>
       {href && (
         <Link
           href={href}

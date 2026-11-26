@@ -15,6 +15,7 @@ import type {
   WatchStatesResponse,
 } from '@server/interfaces/api/watchInterfaces';
 import { getSettings } from '@server/lib/settings';
+import { hiddenFor, hide, unhide } from '@server/lib/watch/hidden';
 import type { Json } from '@server/lib/watch/jellyfin';
 import {
   JellyfinError,
@@ -168,11 +169,37 @@ watchRoutes.get(
         `/Shows/NextUp?${qs({ userId, limit: 20, fields, enableResumable: false, enableRewatching: false })}`
       ),
     ]);
-    const items: Json[] = [...resume.Items];
+    // Leave out what was removed with ✕, unless something of it was played since.
+    const hidden = hiddenFor(req.user.id);
+    const candidates = [...resume.Items, ...nextUp.Items] as Json[];
+    const keyOf = (i: Json): string => i.SeriesId ?? i.Id;
+    const stillHidden = new Set<string>();
+    await Promise.all(
+      [...new Set(candidates.map(keyOf))]
+        .filter((key) => hidden[key])
+        .map(async (key) => {
+          const film = candidates.find((i) => i.Id === key);
+          const latest: Json | undefined = film
+            ? film
+            : (
+                await jellyfin(
+                  'GET',
+                  `/Items?${qs({ userId, parentId: key, recursive: true, includeItemTypes: 'Episode', sortBy: 'DatePlayed', sortOrder: 'Descending', limit: 1, enableImages: false })}`
+                )
+              ).Items[0];
+          const played = Date.parse(latest?.UserData?.LastPlayedDate ?? '');
+          if (played > Date.parse(hidden[key])) unhide(req.user.id, key);
+          else stillHidden.add(key);
+        })
+    );
+    const shown = (list: Json[]) =>
+      list.filter((i) => !stillHidden.has(keyOf(i)));
+
+    const items: Json[] = shown(resume.Items);
     const seenSeries = new Set(
       items.filter((i) => i.SeriesId).map((i) => i.SeriesId)
     );
-    for (const ep of nextUp.Items) {
+    for (const ep of shown(nextUp.Items)) {
       if (!seenSeries.has(ep.SeriesId)) {
         seenSeries.add(ep.SeriesId);
         items.push(ep);
@@ -184,6 +211,31 @@ watchRoutes.get(
         toWatchItem(i, i.SeriesId ? series.get(i.SeriesId) : undefined)
       ),
     };
+  })
+);
+
+// ✕ on a Continue Watching card: hide the film or series there until it's played again.
+// Something only just started (under 5 minutes in) also has its position cleared, as if it
+// was never started; otherwise the position is kept for resuming from its page.
+const JUST_STARTED_TICKS = 5 * 60 * 10_000_000;
+watchRoutes.post(
+  '/hide',
+  handle(async (req) => {
+    const userId = req.user.jellyfinUserId;
+    const id = String(req.body?.jellyfinId ?? '');
+    if (!/^[0-9a-f]{32}$/i.test(id)) throw new Error('bad jellyfinId');
+    const item: Json | undefined = (
+      await jellyfin('GET', `/Items?${qs({ ids: id, userId })}`)
+    ).Items[0];
+    if (!item) throw new Error('Not in the library.');
+    const position = item.UserData?.PlaybackPositionTicks ?? 0;
+    if (position > 0 && position < JUST_STARTED_TICKS) {
+      await jellyfin('POST', `/UserItems/${id}/UserData?${qs({ userId })}`, {
+        body: { PlaybackPositionTicks: 0 },
+      });
+    }
+    hide(req.user.id, item.SeriesId ?? item.Id);
+    return { hidden: true };
   })
 );
 
