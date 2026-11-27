@@ -54,11 +54,6 @@ workflows:
         - 'docker/login-action@v4.6.0'
         - 'oras-project/setup-oras@v2.0.1'
         - 'sigstore/cosign-installer@v4.1.2'
-    '.github/workflows/home-theatre.yml':
-        - 'actions/checkout@v7.0.1'
-        - 'docker/build-push-action@v7.3.0'
-        - 'docker/login-action@v4.6.0'
-        - 'docker/setup-buildx-action@v4.3.0'
     '.github/workflows/lint-helm-charts.yml':
         - 'actions/checkout@v7.0.1'
         - 'azure/setup-helm@v5.0.1'
@@ -95,6 +90,11 @@ workflows:
         - 'actions/create-github-app-token@v3.2.0'
         - 'helm/chart-testing-action@v2.8.0'
     '.github/workflows/seerr-labeller.yml': []
+    '.github/workflows/sightseerr.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'docker/build-push-action@v7.3.0'
+        - 'docker/login-action@v4.6.0'
+        - 'docker/setup-buildx-action@v4.3.0'
     '.github/workflows/stale.yml':
         - 'actions/stale@v11.0.0'
     '.github/workflows/test-docs.yml':

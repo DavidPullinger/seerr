@@ -1,77 +1,100 @@
-<p align="center">
-<img src="./public/logo_full.svg" alt="Seerr" style="margin: 20px 0;">
-</p>
-<p align="center">
-<img src="https://github.com/seerr-team/seerr/actions/workflows/release.yml/badge.svg" alt="Seerr Release" />
-<img src="https://github.com/seerr-team/seerr/actions/workflows/ci.yml/badge.svg" alt="Seerr CI">
-</p>
-<p align="center">
-<a href="https://discord.gg/seerr"><img src="https://img.shields.io/discord/783137440809746482" alt="Discord"></a>
-<a href="https://hub.docker.com/r/seerr/seerr"><img src="https://img.shields.io/docker/pulls/seerr/seerr" alt="Docker pulls"></a>
-<a href="https://translate.seerr.dev/engage/seerr/"><img src="https://translate.seerr.dev/widget/seerr/svg-badge.svg" alt="Translation status" /></a>
-<a href="https://github.com/seerr-team/seerr/blob/develop/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/seerr-team/seerr"></a>
+# Sightseerr
 
-**Seerr** is a free and open source software application for managing requests for your media library. It integrates with the media server of your choice: [Jellyfin](https://jellyfin.org), [Plex](https://plex.tv), and [Emby](https://emby.media/). In addition, it integrates with your existing services, such as **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**.
+**[Seerr](https://github.com/seerr-team/seerr) with playback built in.** Browse, request and
+watch in one place: press Play on anything, in your Jellyfin library or not, and it plays
+right there in Seerr's UI.
 
-## Current Features
+Sightseerr is an unofficial fork of Seerr. It is not affiliated with or endorsed by the Seerr
+team, so please report problems [here](https://github.com/DavidPullinger/sightseerr/issues),
+not upstream.
 
-- Full Jellyfin/Emby/Plex integration including authentication with user import & management.
-- Support for **PostgreSQL** and **SQLite** databases.
-- Supports Movies, Shows and Mixed Libraries.
-- Ability to change email addresses for SMTP purposes.
-- Easy integration with your existing services. Currently, Seerr supports Sonarr and Radarr. More to come!
-- Jellyfin/Emby/Plex library scan, to keep track of the titles which are already available.
-- Customizable request system, which allows users to request individual seasons or movies in a friendly, easy-to-use interface.
-- Incredibly simple request management UI. Don't dig through the app to simply approve recent requests!
-- Granular permission system.
-- Support for various notification agents.
-- Mobile-friendly design, for when you need to approve requests on the go!
-- Support for watchlisting & blocklisting media.
+## What it adds
 
-With more features on the way! Check out our [issue tracker](/../../issues) to see the features which have already been requested.
+- **Continue Watching** row at the top of Discover: films and episodes in progress, then the
+  next episode of series you're watching. The ✕ on a card hides the title until you next play
+  something from it (anything under 5 minutes in also has its position cleared).
+- **Play inside Seerr**: a full-screen player over the current page, with no new tab and no
+  Jellyfin UI. Film and series pages get Play / Resume ("Resume S1 E3"), and title cards get Play
+  on hover plus a progress bar or a Watched tick.
+- **Play before it's in the library**: Play on a title you don't have yet requests it the
+  normal way (the film, or that season), then hurries Radarr/Sonarr and Jellyfin along and starts
+  playing as soon as the file is there. This is built for a download client that is near
+  instant, such as Real-Debrid through [Decypharr](https://github.com/sirrobot01/decypharr).
+- **Episode lists, Netflix style**: every episode of a season with its still and state. Episodes
+  you have play, "Not on disk" fetches that episode and plays it, and "Not available yet" means
+  it hasn't aired. You can also blur unwatched episodes to avoid spoilers.
 
-## Getting Started
+Everything else is Seerr as you know it.
 
-Check out our documentation for instructions on how to install and run Seerr:
+## Requirements
 
-https://docs.seerr.dev/getting-started/
+- **Jellyfin** as the media server, with **Quick Connect** enabled. Seerr's server signs each user's
+  linked Jellyfin account in through Quick Connect, approved with Seerr's Jellyfin API key, so
+  the browser only ever gets that user's own token, never the admin key.
+- Jellyfin must be **reachable from the browser** at Seerr's "Jellyfin external URL", for example
+  `/jellyfin` on the same host behind a reverse proxy, because video streams straight from Jellyfin.
+- Radarr and Sonarr connected in Seerr, if you want Play to work on titles you don't have yet.
 
-## Preview
+## Install
 
-<img src="./public/preview.jpg" alt="Seerr application preview" />
+It's a drop-in replacement for the Seerr image, with the same config volume and port:
 
-## Migrating from Overseerr/Jellyseerr to Seerr
+```yaml
+services:
+  sightseerr:
+    image: ghcr.io/davidpullinger/sightseerr:latest
+    environment:
+      TZ: Etc/UTC
+    volumes:
+      - ./config:/app/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
+```
 
-Read our [release announcement](https://docs.seerr.dev/blog/seerr-release) to learn what Seerr means for Jellyseerr and Overseerr users.
+Each push to `main` is also published as `ghcr.io/davidpullinger/sightseerr:main-<commit sha>`.
+For a complete Jellyfin + Real-Debrid stack that uses Sightseerr, see
+[home-theatre](https://github.com/DavidPullinger/home-theatre).
 
-Please follow our [migration guide](https://docs.seerr.dev/migration-guide) for detailed instructions on migrating from Overseerr or Jellyseerr.
+To switch an existing Seerr install, point it at this image and keep its config folder. To go
+back, use the Seerr image again; Sightseerr adds no database tables or migrations.
 
-## Support
+## Where the code is
 
-- Check out the [Seerr Documentation](https://docs.seerr.dev) before asking for help. Your question might already be in the docs!
-- You can get support on [Discord](https://discord.gg/seerr).
-- You can ask questions in the Help category of our [GitHub Discussions](/../../discussions).
-- Bug reports and feature requests can be submitted via [GitHub Issues](/../../issues).
+New files (no upstream conflicts):
 
-## API Documentation
+- `server/routes/watch.ts`, `server/interfaces/api/watchInterfaces.ts`: `/api/v1/watch/*`
+- `server/lib/watch/`: Jellyfin calls, the "play before it's in the library" pipeline
+  (`prepare.ts`), and the Continue Watching hide list (`hidden.ts`, in `config/watch-hidden.json`)
+- `src/components/Watch/`: the player (`Player.tsx`, `engine.ts`), session, episode list and page
+  widgets
+- `.github/workflows/sightseerr.yml`: builds and publishes the image
 
-You can access the API documentation from your local Seerr install at http://localhost:5055/api-docs
+Small hooks into upstream files (keep these minimal):
 
-## Community
+- `server/index.ts`: mounts `/api/v1/watch` before the OpenAPI validator
+- `src/components/Discover/index.tsx`: Continue Watching row
+- `src/components/TitleCard/index.tsx`: progress badge and Play button
+- `src/components/MovieDetails/index.tsx`, `src/components/TvDetails/index.tsx`: Play / Resume
+- `src/components/TvDetails/Season/index.tsx`: episode list
+- `server/api/github.ts`, `src/components/Settings/SettingsAbout/`: update checks and release
+  links point here; `server/lib/settings/index.ts`: default app title
+- `package.json`, `pnpm-lock.yaml`: `hls.js`
 
-You can ask questions, share ideas, and more in [GitHub Discussions](/../../discussions).
+## Updating to a new Seerr release
 
-If you would like to chat with other members of our growing community, [join the Seerr Discord server](https://discord.gg/seerr)!
+`main` is based on Seerr's release tags. Merge each new release in; don't rebase, because the
+history is public:
 
-Our [Code of Conduct](./CODE_OF_CONDUCT.md) applies to all Seerr community channels.
+```bash
+git remote add upstream https://github.com/seerr-team/seerr.git   # once
+git fetch upstream --tags
+git merge vX.Y.Z
+# lockfile conflict: take upstream's, then `pnpm add hls.js@<version>`
+pnpm typecheck && git push origin main
+```
 
-## Contributing
+## Credits and licence
 
-You can help improve Seerr too! Check out our [Contribution Guide](./CONTRIBUTING.md) to get started.
-
-## Contributors ✨
-
-[![Contributors](https://opencollective.com/seerr/contributors.svg?width=890)](https://opencollective.com/seerr/#backers)
-
-[![Become a Backer](https://opencollective.com/seerr/backers.svg)](https://opencollective.com/seerr/#backers)
-[![Become a Sponsor](https://opencollective.com/seerr/sponsors.svg)](https://opencollective.com/seerr/#sponsors)
+Sightseerr is built on [Seerr](https://github.com/seerr-team/seerr) (and before it Overseerr
+and Jellyseerr) by its contributors. It is MIT licensed like Seerr; see [LICENSE](LICENSE).
