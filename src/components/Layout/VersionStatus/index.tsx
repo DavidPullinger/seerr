@@ -13,7 +13,7 @@ import useSWR from 'swr';
 
 const messages = defineMessages('components.Layout.VersionStatus', {
   streamdevelop: 'Seerr Develop',
-  streamstable: 'Seerr Stable',
+  streamstable: 'Sightseerr',
   outofdate: 'Out of Date',
   commitsbehind:
     '{commitsBehind} {commitsBehind, plural, one {commit} other {commits}} behind',
