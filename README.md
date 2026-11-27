@@ -22,7 +22,7 @@ not upstream.
   instant, such as Real-Debrid through [Decypharr](https://github.com/sirrobot01/decypharr).
 - **Episode lists, Netflix style**: every episode of a season with its still and state. Episodes
   you have play, "Not on disk" fetches that episode and plays it, and "Not available yet" means
-  it hasn't aired. You can also blur unwatched episodes to avoid spoilers.
+  it hasn't aired. Unwatched episodes can be blurred to avoid spoilers (see Options).
 
 Everything else is Seerr as you know it.
 
@@ -45,6 +45,7 @@ services:
     image: ghcr.io/davidpullinger/sightseerr:latest
     environment:
       TZ: Etc/UTC
+      WATCH_BLUR_UNWATCHED: "true"   # optional, see Options
     volumes:
       - ./config:/app/config
     ports:
@@ -59,6 +60,16 @@ For a complete Jellyfin + Real-Debrid stack that uses Sightseerr, see
 To switch an existing Seerr install, point it at this image and keep its config folder. To go
 back, use the Seerr image again; Sightseerr adds no database tables or migrations.
 
+## Options
+
+Set these on the container's environment:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `WATCH_BLUR_UNWATCHED` | `false` | Blur the stills and descriptions of episodes you haven't watched. |
+| `WATCH_NEXT_UP_BEFORE_END` | `0` | Seconds before an episode ends that "Up next" appears, e.g. `30` to show it over the credits. With `0` it appears when the episode ends. |
+| `WATCH_NEXT_UP_COUNTDOWN` | `10` | Seconds "Up next" counts down before playing the next episode. `0` plays it straight away. |
+
 ## Where the code is
 
 New files (no upstream conflicts):
@@ -66,8 +77,8 @@ New files (no upstream conflicts):
 - `server/routes/watch.ts`, `server/interfaces/api/watchInterfaces.ts`: `/api/v1/watch/*`
 - `server/lib/watch/`: Jellyfin calls, the "play before it's in the library" pipeline
   (`prepare.ts`), and the Continue Watching hide list (`hidden.ts`, in `config/watch-hidden.json`)
-- `src/components/Watch/`: the player (`Player.tsx`, `engine.ts`), session, episode list and page
-  widgets
+- `src/components/Watch/`: the player (`Player.tsx`, `engine.ts`), session, episode list, page
+  widgets and the options above (`config.ts`, served by `/api/v1/watch/config`)
 - `.github/workflows/sightseerr.yml`: builds and publishes the image
 
 Small hooks into upstream files (keep these minimal):

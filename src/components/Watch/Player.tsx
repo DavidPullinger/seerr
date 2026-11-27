@@ -1,4 +1,5 @@
 // Home-theatre fork: the full-screen player opened from Seerr's Play buttons.
+import { useWatchConfig } from '@app/components/Watch/config';
 import type { Json, Toast } from '@app/components/Watch/engine';
 import { Engine, clock } from '@app/components/Watch/engine';
 import type { PrepareTarget } from '@app/components/Watch/openPlayer';
@@ -238,6 +239,11 @@ const PlayerView = ({
   const [hover, setHover] = useState<number | null>(null);
   const [upNext, setUpNext] = useState<number | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // "Up next" was cancelled for this item; it stays away until you seek back.
+  const nextUpDismissed = useRef(false);
+  const { nextUpBeforeEnd, nextUpCountdown } = useWatchConfig();
+  const countdownRef = useRef(nextUpCountdown);
+  countdownRef.current = nextUpCountdown;
 
   const engine = engineRef.current;
 
@@ -279,6 +285,8 @@ const PlayerView = ({
   useEffect(() => {
     if (!engine) return;
     setUpNext(null);
+    setTime(0);
+    nextUpDismissed.current = false;
     engine.open(itemId);
   }, [itemId, engine]);
 
@@ -331,7 +339,15 @@ const PlayerView = ({
       ['timeupdate', update],
       ['progress', update],
       ['durationchange', update],
-      ['play', update],
+      [
+        'play',
+        () => {
+          update();
+          // Start the idle timer, so the cursor and controls hide even when playback
+          // started on its own (the next episode) and the mouse hasn't moved.
+          wake();
+        },
+      ],
       [
         'pause',
         () => {
@@ -354,8 +370,9 @@ const PlayerView = ({
         'ended',
         () => {
           engineRef.current?.stop(false);
-          if (engineRef.current?.next) setUpNext(10);
-          else onClose();
+          if (!engineRef.current?.next) onClose();
+          else if (!nextUpDismissed.current)
+            setUpNext((n) => n ?? countdownRef.current);
         },
       ],
     ];
@@ -363,21 +380,22 @@ const PlayerView = ({
     return () => {
       for (const [ev, fn] of events) v.removeEventListener(ev, fn);
     };
-  }, [onClose]);
+  }, [onClose, wake]);
 
-  // Up-next countdown
+  // Up-next countdown (WATCH_NEXT_UP_COUNTDOWN). Held while you've paused mid-episode.
   useEffect(() => {
     if (upNext === null) return;
     if (upNext <= 0) {
       playNext();
       return;
     }
+    if (paused && !videoRef.current?.ended) return;
     const t = setTimeout(
       () => setUpNext((n) => (n === null ? n : n - 1)),
       1000
     );
     return () => clearTimeout(t);
-  }, [upNext, playNext]);
+  }, [upNext, paused, playNext]);
 
   useEffect(() => {
     const onFs = () => setFullscreen(!!document.fullscreenElement);
@@ -428,6 +446,31 @@ const PlayerView = ({
   }, [toggle, seekBy, toggleFullscreen, playNext, onClose, menu, wake]);
 
   const total = engine?.duration || 0;
+  const next: Json = engine?.next;
+
+  // "Up next" over the end credits: WATCH_NEXT_UP_BEFORE_END seconds before the end.
+  // With 0 it only appears once the episode has ended (the handler above).
+  const remaining = total - time;
+  const hasNext = !!next;
+  useEffect(() => {
+    if (!nextUpBeforeEnd || !hasNext || !total || time <= 0) return;
+    if (remaining <= nextUpBeforeEnd) {
+      if (!paused && !nextUpDismissed.current)
+        setUpNext((n) => n ?? nextUpCountdown);
+    } else if (remaining > nextUpBeforeEnd + 1) {
+      // Seeked back out of the credits.
+      nextUpDismissed.current = false;
+      setUpNext(null);
+    }
+  }, [
+    remaining,
+    time,
+    total,
+    paused,
+    hasNext,
+    nextUpBeforeEnd,
+    nextUpCountdown,
+  ]);
   const shownTime = drag !== null ? drag * total : time;
   const pct = total ? (shownTime / total) * 100 : 0;
 
@@ -453,7 +496,6 @@ const PlayerView = ({
           1920
         )
       : undefined;
-  const next: Json = engine?.next;
 
   const menuOptions =
     menu === 'audio'
@@ -742,7 +784,7 @@ const PlayerView = ({
         </div>
       )}
 
-      {upNext !== null && next && engine && (
+      {upNext !== null && upNext > 0 && next && engine && (
         <div
           className="absolute bottom-24 right-5 z-10 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
@@ -773,7 +815,10 @@ const PlayerView = ({
               </button>
               <button
                 type="button"
-                onClick={() => setUpNext(null)}
+                onClick={() => {
+                  nextUpDismissed.current = true;
+                  setUpNext(null);
+                }}
                 className="rounded-md border border-gray-600 bg-gray-700 px-3 py-1.5 text-sm font-medium text-gray-200 hover:bg-gray-600"
               >
                 Cancel

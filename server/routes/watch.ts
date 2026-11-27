@@ -7,6 +7,7 @@ import { MediaType } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
 import Media from '@server/entity/Media';
 import type {
+  WatchConfigResponse,
   WatchHomeResponse,
   WatchItem,
   WatchNextResponse,
@@ -115,6 +116,24 @@ const handle =
       return res.status(status).json({ status, error: (e as Error).message });
     }
   };
+
+const envSeconds = (name: string, fallback: number): number => {
+  const raw = process.env[name]?.trim();
+  const n = Number(raw);
+  return raw && Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+
+// Options set on the container (see README): read on each call, so no restart order matters.
+watchRoutes.get('/config', (_req, res) => {
+  const config: WatchConfigResponse = {
+    blurUnwatched: /^(1|true|yes|on)$/i.test(
+      process.env.WATCH_BLUR_UNWATCHED?.trim() ?? ''
+    ),
+    nextUpBeforeEnd: envSeconds('WATCH_NEXT_UP_BEFORE_END', 0),
+    nextUpCountdown: envSeconds('WATCH_NEXT_UP_COUNTDOWN', 10),
+  };
+  return res.status(200).json(config);
+});
 
 // A Jellyfin token for the browser: Quick Connect, approved with the admin key.
 watchRoutes.post(

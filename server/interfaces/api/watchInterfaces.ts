@@ -56,3 +56,13 @@ export interface WatchSeasonResponse {
 export interface WatchNextResponse {
   next?: WatchItem & { resume: boolean; season?: number; episode?: number };
 }
+
+/** Player and episode-list options, from the server's environment. */
+export interface WatchConfigResponse {
+  /** WATCH_BLUR_UNWATCHED: blur stills and descriptions of unwatched episodes. */
+  blurUnwatched: boolean;
+  /** WATCH_NEXT_UP_BEFORE_END: seconds before an episode ends that "Up next" appears. */
+  nextUpBeforeEnd: number;
+  /** WATCH_NEXT_UP_COUNTDOWN: seconds "Up next" counts down before playing it. */
+  nextUpCountdown: number;
+}

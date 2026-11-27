@@ -7,43 +7,13 @@
 import AirDateBadge from '@app/components/AirDateBadge';
 import CachedImage from '@app/components/Common/CachedImage';
 import { useJellyfinBase, useSeasonWatch } from '@app/components/Watch';
+import { useWatchConfig } from '@app/components/Watch/config';
 import { openPlayer } from '@app/components/Watch/openPlayer';
 import { ArrowDownTrayIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
 import type { WatchEpisodeState } from '@server/interfaces/api/watchInterfaces';
 import type { SeasonWithEpisodes } from '@server/models/Tv';
-import { useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-
-// --- "Blur unwatched" (spoilers), per browser ---------------------------------------
-const BLUR_KEY = 'seerr.watch.blurUnwatched';
-const blurListeners = new Set<() => void>();
-const readBlur = () => {
-  try {
-    return localStorage.getItem(BLUR_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
-const useBlurUnwatched = (): [boolean, (on: boolean) => void] => {
-  const on = useSyncExternalStore(
-    (cb) => {
-      blurListeners.add(cb);
-      return () => blurListeners.delete(cb);
-    },
-    readBlur,
-    () => false
-  );
-  const set = (value: boolean) => {
-    try {
-      localStorage.setItem(BLUR_KEY, value ? '1' : '0');
-    } catch {
-      // private mode
-    }
-    blurListeners.forEach((cb) => cb());
-  };
-  return [on, set];
-};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GENERIC_NAME = /^Episode \d+$/i;
@@ -125,7 +95,8 @@ const EpisodeList = ({
   const { data: series } = useSWR<{ name?: string }>(`/api/v1/tv/${tvId}`);
   const title = series?.name;
   const base = useJellyfinBase();
-  const [blur, setBlur] = useBlurUnwatched();
+  // WATCH_BLUR_UNWATCHED on the server: hides spoilers in stills and descriptions.
+  const blur = useWatchConfig().blurUnwatched;
   const rows = merge(episodes, watch);
 
   const activate = (r: Row) => {
@@ -148,17 +119,6 @@ const EpisodeList = ({
 
   return (
     <div>
-      <div className="flex justify-end pt-3">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-400 hover:text-gray-200">
-          <input
-            type="checkbox"
-            checked={blur}
-            onChange={(e) => setBlur(e.target.checked)}
-            className="rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
-          />
-          Blur unwatched
-        </label>
-      </div>
       <ul className="divide-y divide-gray-700">
         {rows.map((r) => {
           const played = !!r.watch?.played;
@@ -177,7 +137,7 @@ const EpisodeList = ({
               src={r.tmdbStill}
               alt=""
               fill
-              className={`object-cover ${hidden ? 'scale-110 blur-md' : ''}`}
+              className={`object-cover ${hidden ? 'scale-105 blur-[5px]' : ''}`}
             />
           ) : r.watch?.hasImage ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -185,7 +145,7 @@ const EpisodeList = ({
               src={`${base}/Items/${r.watch.jellyfinId}/Images/Primary?fillWidth=400&quality=85`}
               alt=""
               loading="lazy"
-              className={`absolute inset-0 h-full w-full object-cover ${hidden ? 'scale-110 blur-md' : ''}`}
+              className={`absolute inset-0 h-full w-full object-cover ${hidden ? 'scale-105 blur-[5px]' : ''}`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-700 to-gray-800 text-3xl font-bold text-gray-500">
@@ -278,7 +238,7 @@ const EpisodeList = ({
                 {r.overview && (
                   <p
                     className={`mt-1 line-clamp-3 text-sm text-gray-400 ${
-                      hidden ? 'select-none blur-sm' : ''
+                      hidden ? 'select-none blur-[3px]' : ''
                     }`}
                   >
                     {r.overview}
